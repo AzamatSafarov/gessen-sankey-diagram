@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сергей Гессень: культурная диффузия — Санкей-диаграмма</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --bg-card: #12121a;
+  --bg-panel: #161620;
+  --border: rgba(255,255,255,0.06);
+  --border-light: rgba(255,255,255,0.10);
+  --text: #c8c8d0;
+  --text-bright: #eeeeef;
+  --text-dim: #66666e;
+  --accent: #d4946a;
+  --accent-soft: rgba(212,148,106,0.15);
+  --glow: 0 0 20px rgba(212,148,106,0.15);
+  --transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter',system-ui,-apple-system,sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Header ── */
+.hero {
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(180deg,#12121a 0%,#0a0a0f 100%);
+  padding: 3.5rem 1.5rem 2.5rem;
+  text-align: center;
+  position: relative;
+}
+.hero::after {
+  content:''; position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+  width:140px; height:2px; background: linear-gradient(90deg,transparent,var(--accent),transparent);
+}
+.hero .eyebrow {
+  display:inline-block; font-size:.65rem; text-transform:uppercase; letter-spacing:.35em; color:var(--accent); margin-bottom:1rem;
+}
+.hero h1 {
+  font-family:'Cormorant Garamond',serif; font-size:clamp(1.8rem,4vw,3rem); font-weight:600; color:var(--text-bright); line-height:1.15; max-width:780px; margin:0 auto .75rem;
+}
+.hero .subtitle { font-size:.9rem; color:var(--text-dim); max-width:640px; margin:0 auto; font-weight:300; }
+
+/* ── Controls ── */
+.controls {
+  display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; align-items:center;
+  padding:1.25rem 1rem; border-bottom: 1px solid var(--border-light); background: var(--bg-card);
+}
+
+.view-tabs {
+  display:flex; gap:.25rem; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; padding:3px;
+}
+.view-tabs button {
+  background:none; border:none; color:var(--text-dim); padding:.45rem 1.1rem; font-size:.78rem; font-weight:500; cursor:pointer; border-radius:6px; transition:var(--transition); white-space:nowrap;
+}
+.view-tabs button:hover { color:var(--text-bright); }
+.view-tabs button.active { background:rgba(255,255,255,0.07); color:var(--text-bright); box-shadow:0 2px 8px rgba(0,0,0,.2); }
+
+.year-range { display:flex; align-items:center; gap:.75rem; }
+.year-range label { font-size:.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; }
+.year-range input[type=range] {
+  -webkit-appearance:none; appearance:none; width:220px; height:3px; background:var(--border-light); border-radius:2px; cursor:pointer;
+}
+.year-range input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px rgba(212,148,106,0.4); cursor:pointer; border:2px solid var(--bg);
+}
+.year-range .year-display { font-family:'Cormorant Garamond',serif; font-size:1.15rem; font-weight:600; color:var(--text-bright); min-width:48px; text-align:right; }
+
+/* ── Layout ── */
+main { display:flex; flex-direction:column; padding:2rem 1rem; max-width:1400px; margin:0 auto; gap:2rem; }
+
+#chart-wrap { position:relative; width:100%; }
+#chart-wrap svg { display:block; width:100%; height:auto; }
+
+/* ── Info panel ── */
+.info-panel {
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; padding:1.5rem; transition:var(--transition);
+}
+.info-panel .panel-title {
+  font-family:'Cormorant Garamond',serif; font-size:1.25rem; color:var(--text-bright); margin-bottom:.5rem;
+}
+.info-panel .panel-desc { font-size:.8rem; color:var(--text-dim); margin-bottom:1rem; line-height:1.5; }
+.info-panel .stat-row {
+  display:flex; gap:2rem; flex-wrap:wrap; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border);
+}
+.stat-row .stat { display:flex; flex-direction:column; }
+.stat-row .stat-value { font-family:'Cormorant Garamond',serif; font-size:1.6rem; font-weight:600; color:var(--accent); }
+.stat-row .stat-label { font-size:.65rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin-top:.15rem; }
+
+/* ── Tooltip ── */
+.tooltip {
+  position:absolute; pointer-events:none; opacity:0; transition:opacity .15s ease; z-index:100;
+  background:rgba(18,18,26,.95); border:1px solid var(--border-light); border-radius:8px; padding:.75rem 1rem;
+  backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,.4); max-width:280px;
+}
+.tooltip.show { opacity:1; }
+.tooltip .tt-title { font-family:'Cormorant Garamond',serif; font-size:1rem; color:var(--text-bright); margin-bottom:.25rem; }
+.tooltip .tt-value { font-size:.75rem; color:var(--accent); font-weight:500; margin-bottom:.4rem; }
+.tooltip .tt-desc { font-size:.75rem; color:var(--text); line-height:1.4; }
+
+/* ── Legend ── */
+.legend-wrap { display:flex; flex-wrap:wrap; gap:1.5rem; justify-content:center; margin-top:1rem; }
+.legend-group { display:flex; align-items:center; gap:.5rem; font-size:.72rem; color:var(--text-dim); cursor:default; transition:var(--transition); }
+.legend-group:hover { color:var(--text-bright); }
+.legend-swatch { width:10px; height:10px; border-radius:3px; }
+
+/* ── Footer ── */
+footer {
+  border-top:1px solid var(--border-light); padding:2rem 1rem; text-align:center;
+  color:var(--text-dim); font-size:.75rem;
+}
+footer a { color:var(--accent); text-decoration:none; }
+
+/* ── Animations ── */
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+.fade-in { animation:fadeIn .6s ease-out forwards; }
+
+/* responsive */
+@media (max-width:640px) {
+  .controls { flex-direction:column; align-items:stretch; }
+  .year-range { justify-content:space-between; }
+  .year-range input[type=range] { flex:1; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero fade-in">
+  <div class="eyebrow">Sergei Gessen · Cultural Diffusion</div>
+  <h1 id="pageTitle">Сергей Гессень: поток идей между языками и странами</h1>
+  <p class="subtitle" id="pageSub">Санкей-диаграмма публикаций. Полосы — реальные потоки публикаций. Толщина пропорциональна объёму.</p>
+</header>
+
+<div class="controls">
+  <div class="view-tabs" id="viewTabs">
+    <button data-view="langToCountry" class="active">Язык → Страна</button>
+    <button data-view="countryToLang">Страна → Язык</button>
+    <button data-view="ideaEvolution">Генеалогия идей</button>
+  </div>
+  <div class="year-range">
+    <label id="yearLabel">Год</label>
+    <input type="range" id="yearSlider" min="1908" max="1975" value="1975" step="1">
+    <span class="year-display" id="yearDisplay">1975</span>
+  </div>
+</div>
+
+<main>
+  <div id="chart-wrap">
+    <svg id="sankeySvg"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="info-panel fade-in" id="infoPanel">
+    <h3 class="panel-title" id="panelTitle">Язык → Страна</h3>
+    <p class="panel-desc" id="panelDesc">Левая сторона: 13 языков. Правая: 16 стран. Толщина линии = количество публикаций. Наведите на полосу для деталей.</p>
+    <div class="stat-row" id="statsRow"></div>
+  </div>
+
+  <div class="legend-wrap" id="legendWrap"></div>
+</main>
+
+<footer>
+  <p>Составители: <a href="https://github.com/AzamatSafarov">Azamat Safarov</a>, Oleg Osovsky</p>
+  <p>Данные: собранные работы по каталогу периодики и многотомнику.</p>
+</footer>
+
+<script>
+// ═══════════════════════════════════╦══
+//  DATA + STATE                     ║
+// ═══════════════════════════════════╩══
+let rawData = null;
+let currentView = 'langToCountry';
+let maxYear = 1975;
+let activeLangFilter = null;
+
+d3.json('gessen_sankey_data.json').then(d => {
+  rawData = d;
+  renderView(currentView);
+});
+
+// ═══════════════════════════════════╦══
+//  VIEW SWITCHING                   ║
+// ═══════════════════════════════════╩══
+document.querySelectorAll('#viewTabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#viewTabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    renderView(currentView);
+  });
+});
+
+// ═══════════════════════════════════╦══
+//  YEAR SLIDER                      ║
+// ═══════════════════════════════════╩══
+const yearSlider = document.getElementById('yearSlider');
+const yearDisplay = document.getElementById('yearDisplay');
+yearSlider.addEventListener('input', () => {
+  maxYear = +yearSlider.value;
+  yearDisplay.textContent = maxYear;
+  renderLinks(currentView);
+});
+
+// ═══════════════════════════════════╦══
+//  RENDER SANKEY                    ║
+// ═══════════════════════════════════╩══
+function renderView(viewKey) {
+  const view = rawData.views[viewKey];
+  if(!view) return;
+
+  // Update panel
+  document.getElementById('panelTitle').textContent = view.label;
+  document.getElementById('panelDesc').textContent = view.description;
+
+  // Legend
+  const groups = {};
+  view.nodes.forEach(n=>{ if(!groups[n.group]) groups[n.group]=[]; groups[n.group].push(n); });
+  const legendWrap = document.getElementById('legendWrap');
+  legendWrap.innerHTML = '';
+  const groupNames = {language:'Языки',country:'Страны',source:'Источники',theme:'Темы',era:'Эпохи',legacy:'Наследие'};
+  Object.keys(groups).forEach(gk=>{
+    const sample = groups[gk][0];
+    const div = document.createElement('div'); div.className='legend-group';
+    div.innerHTML = `<div class="legend-swatch" style="background:${sample.color}"></div><span>${groupNames[gk]||gk}</span>`;
+    legendWrap.appendChild(div);
+  });
+
+  // Stats
+  const totalLinks = view.links.length;
+  const totalFlow = view.links.reduce((s,l)=>s+l.value,0);
+  const maxNode = view.nodes.reduce((m,n)=>{ const out = view.links.filter(l=>l.source===n.id).reduce((s,l)=>s+l.value,0); const inn = view.links.filter(l=>l.target===n.id).reduce((s,l)=>s+l.value,0); return Math.max(m,Math.max(out,inn)); },0);
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat"><span class="stat-value">${view.nodes.length}</span><span class="stat-label">Узлов</span></div>
+    <div class="stat"><span class="stat-value">${totalLinks}</span><span class="stat-label">Связей</span></div>
+    <div class="stat"><span class="stat-value">${Math.round(totalFlow)}</span><span class="stat-label">Общий поток</span></div>
+    <div class="stat"><span class="stat-value">${maxNode}</span><span class="stat-label">Пик узла</span></div>
+  `;
+
+  drawSankey(view);
+}
+
+let sankeyNodeSelection = null;
+
+function drawSankey(view) {
+  const svg = d3.select('#sankeySvg');
+  svg.selectAll('*').remove();
+
+  const container = document.getElementById('chart-wrap');
+  const W = container.offsetWidth;
+  const H = Math.min(window.innerHeight * 0.6, 720);
+  const margin = {top:30,right:120,bottom:20,left:120};
+  const w = Math.max(600,W) - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  svg.attr('viewBox',`0 0 ${W} ${H}`);
+
+  // Filter links by year
+  const year = +yearSlider.value;
+  const visibleLinks = view.links.filter(l => l.startYear <= year);
+  if(visibleLinks.length === 0) { visibleLinks.push(...view.links.filter(l=>l.startYear===view.links[0].startYear)); }
+
+  // Build node indices for sankey
+  const nodeIndex = new Map(view.nodes.map((n,i)=>[n.id,i]));
+  const sankeyLinks = visibleLinks.map(l => ({
+    source: nodeIndex.get(l.source),
+    target: nodeIndex.get(l.target),
+    value: l.value,
+    color: view.nodes[l.source]?.color || '#999',
+    meta: l
+  }));
+
+  const sankey = d3.sankey()
+    .nodeId(d=>d.index)
+    .nodeWidth(20)
+    .nodePadding(14)
+    .extent([[margin.left,margin.top],[margin.left+w,margin.top+h]]);
+
+  const graph = sankey({
+    nodes: view.nodes.map((n,i)=>({index:i,...n})).filter((n,i)=>
+      sankeyLinks.some(l=>l.source===i||l.target===i)
+    ),
+    links: sankeyLinks
+  });
+
+  if(!graph.nodes.length){ return; }
+
+  // ── Links ──
+  const linkGradients = svg.append('defs').selectAll('linearGradient')
+    .data(graph.links)
+    .join('linearGradient')
+    .attr('id', (d,i)=>`grad-${i}`)
+    .attr('gradientUnits','userSpaceOnUse')
+    .attr('x1', d=>d.source.x1)
+    .attr('x2', d=>d.target.x0);
+
+  linkGradients.append('stop').attr('offset','0%').attr('stop-color', d=>d.source.color);
+  linkGradients.append('stop').attr('offset','100%').attr('stop-color', d=>d.target.color);
+
+  const linkSel = svg.append('g')
+    .selectAll('path')
+    .data(graph.links)
+    .join('path')
+    .attr('class','sankey-link')
+    .attr('d', d3.sankeyLinkHorizontal())
+    .attr('fill','none')
+    .attr('stroke', (d,i)=>`url(#grad-${i})`)
+    .attr('stroke-opacity', .35)
+    .attr('stroke-width', d=>Math.max(1,d.width))
+    .style('cursor','pointer')
+    .on('mouseover', function(event,d){
+      d3.selectAll('.sankey-link').attr('stroke-opacity',.08);
+      d3.select(this).attr('stroke-opacity',.85);
+      showTooltip(event, `${d.source.name} → ${d.target.name}`, d.value + ' публикаций', d.meta.label);
+    })
+    .on('mouseout', ()=>{
+      d3.selectAll('.sankey-link').attr('stroke-opacity', activeLangFilter ? .08 : .35);
+      hideTooltip();
+    });
+
+  // Animate links in
+  linkSel.attr('stroke-dasharray', function(){ const len=this.getTotalLength(); return len+' '+len; })
+    .attr('stroke-dashoffset', function(){ return this.getTotalLength(); })
+    .transition().duration(1000).ease(d3.easeCubicOut)
+    .attr('stroke-dashoffset',0);
+
+  // ── Nodes ──
+  const nodeG = svg.append('g')
+    .selectAll('g')
+    .data(graph.nodes)
+    .join('g');
+
+  // Node rects
+  nodeG.append('rect')
+    .attr('x', d=>d.x0)
+    .attr('y', d=>d.y0)
+    .attr('width', d=>d.x1-d.x0)
+    .attr('height', d=>Math.max(2,d.y1-d.y0))
+    .attr('fill', d=>d.color)
+    .attr('rx', 3)
+    .attr('stroke','rgba(255,255,255,.15)')
+    .attr('stroke-width',.5)
+    .style('cursor','pointer')
+    .on('mouseover', (event,d)=>{
+      d3.selectAll('.sankey-link').attr('stroke-opacity', l=>l.source===d||l.target===d?.7:.08);
+      showTooltip(event, d.name, `Поток: ${Math.round(d.value||0)}`, 'Нажмите чтобы фильтровать связи');
+    })
+    .on('mouseout', ()=>{
+      d3.selectAll('.sankey-link').attr('stroke-opacity', activeLangFilter ? .08 : .35);
+      hideTooltip();
+    })
+    .on('click', (event,d)=>{
+      if(activeLangFilter===d.name){ activeLangFilter=null; }
+      else { activeLangFilter=d.name; }
+      d3.selectAll('.sankey-link')
+        .transition().duration(300)
+        .attr('stroke-opacity', l=>{
+          if(!activeLangFilter) return .35;
+          return (l.source.name===activeLangFilter||l.target.name===activeLangFilter)?.7:.08;
+        });
+    });
+
+  // Node labels
+  nodeG.append('text')
+    .attr('x', d=>d.x0 < w/2 ? d.x1+8 : d.x0-8)
+    .attr('y', d=>(d.y0+d.y1)/2)
+    .attr('dy','0.35em')
+    .attr('text-anchor', d=>d.x0 < w/2 ? 'start' : 'end')
+    .text(d=>d.name)
+    .attr('fill','#c8c8d0')
+    .attr('font-size','11px')
+    .attr('font-weight',500);
+
+  // Node values
+  nodeG.append('text')
+    .attr('x', d=>d.x0 < w/2 ? d.x1+8 : d.x0-8)
+    .attr('y', d=>(d.y0+d.y1)/2+14)
+    .attr('text-anchor', d=>d.x0 < w/2 ? 'start' : 'end')
+    .text(d=>Math.round(d.value||0))
+    .attr('fill','rgba(212,148,106,.7)')
+    .attr('font-size','9px');
+
+  // ── Year tick marks on edges ──
+  const yrStart = 1908, yrEnd = 1975;
+  graph.links.forEach(link => {
+    const meta = link.meta;
+    if(!meta) return;
+    const pct = (meta.startYear - yrStart) / (yrEnd - yrStart);
+    const midX = link.source.x1 + (link.target.x0 - link.source.x1) * pct;
+    // approximate mid-y:
+    const midY = (link.y0 + link.y1) / 2;
+    svg.append('circle')
+      .attr('cx', midX).attr('cy', midY).attr('r', 0)
+      .attr('fill', link.source.color).attr('opacity',0)
+      .transition().delay(800).duration(400)
+      .attr('r',2.5).attr('opacity',.9)
+      .transition().duration(600).attr('r',0).attr('opacity',0).remove();
+  });
+}
+
+// ═══════════════════════════════════╦══
+//  TOOLTIP                          ║
+// ═══════════════════════════════════╩══
+const tooltip = document.getElementById('tooltip');
+function showTooltip(event, title, value, desc){
+  tooltip.innerHTML = `<div class="tt-title">${title}</div><div class="tt-value">${value}</div><div class="tt-desc">${desc}</div>`;
+  tooltip.classList.add('show');
+  positionTooltip(event);
+}
+function positionTooltip(event){
+  const wrap = document.getElementById('chart-wrap').getBoundingClientRect();
+  let x = event.clientX - wrap.left + 16;
+  let y = event.clientY - wrap.top + 16;
+  if(x+250 > wrap.width) x = event.clientX - wrap.left - 270;
+  tooltip.style.left = x+'px'; tooltip.style.top = y+'px';
+}
+function hideTooltip(){ tooltip.classList.remove('show'); }
+
+// Click outside to clear filter
+document.getElementById('chart-wrap').addEventListener('click', (e)=>{
+  if(e.target.tagName!=='rect'){ activeLangFilter=null; d3.selectAll('.sankey-link').transition().duration(300).attr('stroke-opacity',.35); }
+});
+
+// Resize
+window.addEventListener('resize', ()=>{ if(rawData) renderView(currentView); });
+</script>
+</body>
+</html>
